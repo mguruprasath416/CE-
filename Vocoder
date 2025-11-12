@@ -1,0 +1,33 @@
+clc; clear; close all;
+fs = 16000; nfft = 1024; hop = 256; win = hann(nfft,"periodic");
+nBands = 16; fmin = 100; fmax = 7000;
+t = (0:1/fs:2)'; 
+x = sin(2*pi*200*t) + 0.5*sin(2*pi*400*t) + 0.3*sin(2*pi*800*t);
+x = x / max(abs(x));
+[S, f, tt] = stft(x, fs, "Window", win, "OverlapLength", nfft-hop, "FFTLength", nfft);
+mag = abs(S);
+mel = @(f) 2595*log10(1+f/700); imel = @(m) 700*(10.^(m/2595)-1);
+edges = round(linspace(mel(fmin), mel(fmax), nBands+1));
+edges = floor(imel(edges)/(fs/nfft));
+env = zeros(nBands, size(mag,2));
+for b = 1:nBands
+    idx = edges(b):edges(b+1);
+    idx(idx<1 | idx>nfft/2+1) = [];
+    env(b,:) = sqrt(mean(mag(idx,:).^2,1));
+end
+rng(0)
+mag_hat = zeros(size(mag));
+for b = 1:nBands
+    idx = edges(b):edges(b+1);
+    idx(idx<1 | idx>nfft/2+1) = [];
+    noise = randn(length(idx), size(mag,2));
+    noise = noise ./ sqrt(mean(noise.^2,1));
+    mag_hat(idx,:) = noise .* env(b,:);
+end
+S_hat = mag_hat .* exp(1j*2*pi*rand(size(mag_hat)));
+y = istft(S_hat, fs, "Window", win, "OverlapLength", nfft-hop, "FFTLength", nfft);
+y = real(y);                      
+y = y / max(abs(y));             
+sound(y, fs);
+subplot(2,1,1); spectrogram(x, win, nfft-hop, nfft, fs, "yaxis"); title("Input");
+subplot(2,1,2); spectrogram(y, win, nfft-hop, nfft, fs, "yaxis"); title("Vocoder Output");
